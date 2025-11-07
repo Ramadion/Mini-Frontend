@@ -2,16 +2,26 @@ export interface User {
   id: number;
   name: string;
   email: string;
+  password?: string;
   rol: "admin" | "user";
 }
 
+//export interface Team {
+//  id: number;
+//  name: string;
+//  description?: string;
+//  propietario: User;
+//  fechaCreacion: string;
+ // memberships?: any[];
+ // tasks?: Task[];
+//}
 export interface Team {
   id: number;
   name: string;
   description?: string;
   propietario: User;
   fechaCreacion: string;
-  memberships?: Membership[];
+  memberships?: Membership[];  // ← Asegúrate de que esta propiedad esté definida
   tasks?: Task[];
 }
 
@@ -26,12 +36,23 @@ export interface Task {
   team: Team;
   fechaCreacion: string;
   etiquetas: Etiqueta[];
+  historialEstados?: HistorialEstado[];
 }
 
 export interface Etiqueta {
   id: number;
   nombre: string;
   color: string;
+  tareas?: Task[];
+}
+
+export interface HistorialEstado {
+  id: number;
+  tarea: Task;
+  estadoAnterior: string;
+  estadoNuevo: string;
+  usuario: User;
+  fecha: string;
 }
 
 export interface Membership {

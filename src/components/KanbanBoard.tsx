@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Task } from '../types';
+import { Task, Team } from '../types';
 import { taskService } from '../services/taskService';
+import { teamService } from '../services/teamService';
 import { useAuth } from '../contexts/AuthContext';
 
 const KanbanBoard: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [filteredTasks, setFilteredTasks] = useState<Task[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { user } = useAuth();
@@ -12,8 +16,29 @@ const KanbanBoard: React.FC = () => {
   const estados = ['PENDIENTE', 'EN_CURSO', 'FINALIZADA', 'CANCELADA'];
 
   useEffect(() => {
+    loadTeams();
     loadTasks();
   }, []);
+
+  useEffect(() => {
+    filterTasksByTeam();
+  }, [tasks, selectedTeam]);
+
+  const loadTeams = async () => {
+    if (!user) return;
+
+    try {
+      const myTeams = await teamService.getMyTeams(user.id);
+      setTeams(myTeams);
+      
+      // Seleccionar el primer equipo por defecto si hay equipos
+      if (myTeams.length > 0) {
+        setSelectedTeam(myTeams[0].id);
+      }
+    } catch (err: any) {
+      console.error('Error loading teams:', err);
+    }
+  };
 
   const loadTasks = async () => {
     if (!user) return;
@@ -30,6 +55,15 @@ const KanbanBoard: React.FC = () => {
     }
   };
 
+  const filterTasksByTeam = () => {
+    if (selectedTeam) {
+      const filtered = tasks.filter(task => task.team.id === selectedTeam);
+      setFilteredTasks(filtered);
+    } else {
+      setFilteredTasks(tasks);
+    }
+  };
+
   const handleStateChange = async (taskId: number, newState: string) => {
     if (!user) return;
 
@@ -43,7 +77,7 @@ const KanbanBoard: React.FC = () => {
   };
 
   const getTasksByState = (estado: string) => {
-    return tasks.filter(task => task.estado === estado);
+    return filteredTasks.filter(task => task.estado === estado);
   };
 
   const getEstadoColor = (estado: string) => {
@@ -64,6 +98,12 @@ const KanbanBoard: React.FC = () => {
       case 'CANCELADA': return '#dc3545';
       default: return '#6c757d';
     }
+  };
+
+  const getSelectedTeamName = () => {
+    if (!selectedTeam) return 'Todos los equipos';
+    const team = teams.find(t => t.id === selectedTeam);
+    return team ? team.name : 'Equipo no encontrado';
   };
 
   if (loading) {
@@ -96,28 +136,91 @@ const KanbanBoard: React.FC = () => {
 
   return (
     <div style={{ padding: '20px' }}>
+      {/* Header con filtros */}
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center',
+        marginBottom: '30px',
+        flexWrap: 'wrap',
+        gap: '15px'
+      }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Tablero Kanban</h2>
+          <p style={{ margin: '5px 0 0 0', color: '#666' }}>
+            Mostrando: <strong>{getSelectedTeamName()}</strong>
+          </p>
+        </div>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+          {/* Selector de equipo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <label style={{ fontWeight: 'bold', color: '#333' }}>Filtrar por equipo:</label>
+            <select
+              value={selectedTeam || ''}
+              onChange={(e) => setSelectedTeam(e.target.value ? Number(e.target.value) : null)}
+              style={{
+                padding: '10px 15px',
+                borderRadius: '6px',
+                border: '2px solid #007bff',
+                backgroundColor: 'white',
+                cursor: 'pointer',
+                minWidth: '200px',
+                fontSize: '14px'
+              }}
+            >
+              <option value="">Todos los equipos</option>
+              {teams.map(team => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          <button 
+            onClick={loadTasks}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 'bold'
+            }}
+          >
+            🔄 Actualizar
+          </button>
+        </div>
+      </div>
+
+      {/* Estadísticas rápidas */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: '15px',
         marginBottom: '30px'
       }}>
-        <h2>Tablero Kanban</h2>
-        <button 
-          onClick={loadTasks}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#6c757d',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >
-          Actualizar
-        </button>
+        {estados.map(estado => (
+          <div key={estado} style={{
+            backgroundColor: getEstadoColor(estado),
+            padding: '15px',
+            borderRadius: '8px',
+            textAlign: 'center',
+            border: `2px solid ${getEstadoBorderColor(estado)}`
+          }}>
+            <div style={{ fontSize: '24px', fontWeight: 'bold', color: getEstadoBorderColor(estado) }}>
+              {getTasksByState(estado).length}
+            </div>
+            <div style={{ fontSize: '14px', color: '#333', fontWeight: 'bold' }}>
+              {estado}
+            </div>
+          </div>
+        ))}
       </div>
       
+      {/* Tablero Kanban */}
       <div style={{ 
         display: 'grid', 
         gridTemplateColumns: 'repeat(4, 1fr)', 
