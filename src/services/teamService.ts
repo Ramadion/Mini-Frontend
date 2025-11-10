@@ -8,26 +8,24 @@ export const teamService = {
   },
 
   async getMyTeams(userId: number): Promise<Team[]> {
-    // Primero obtenemos todos los equipos
-     const response = await api.get('/teams?userid='+userId)
-    const allTeams = response.data;
-   /* const myTeams: Team[] = [];
+  try {
+    console.log('Solicitando equipos para usuario:', userId); // DEBUG
+    const response = await api.get(`/teams?userid=${userId}`);
+    console.log('Respuesta de equipos:', response.data); // DEBUG
     
-    // Para cada equipo, verificamos si el usuario es miembro
-    for (const team of allTeams) {
-      try {
-        const members = await this.listMembers(team.id);
-        const isMember = members.some((member: any) => member.user.id === userId);
-        if (isMember) {
-          myTeams.push(team);
-        }
-      } catch (error) {
-        console.error(`Error verificando membresía en equipo ${team.id}:`, error);
-      }
-    }*/
+    // Procesar los equipos para asegurar que las membresías estén bien formadas
+    const processedTeams = response.data.map((team: any) => ({
+      ...team,
+      memberships: team.memberships || [],
+      tasks: team.tasks || []
+    }));
     
-    return allTeams;
-  },
+    return processedTeams;
+  } catch (error) {
+    console.error('Error en getMyTeams:', error);
+    throw error;
+  }
+},
 
   async getById(id: number): Promise<Team> {
     const response = await api.get(`/teams/${id}`);
@@ -74,5 +72,12 @@ export const teamService = {
       actorUserId 
     });
     return response.data;
-  }
+  },
+  
+  async salirDelEquipo(teamId: number, userId: number): Promise<void> {
+  await api.delete(`/teams/${teamId}/miembros/${userId}`, { 
+    data: { actorUserId: userId } 
+  });
+}
+
 };

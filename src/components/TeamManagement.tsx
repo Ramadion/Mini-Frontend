@@ -7,7 +7,6 @@ import { useAuth } from '../contexts/AuthContext';
 
 const TeamManagement: React.FC = () => {
   const [teams, setTeams] = useState<Team[]>([]);
-  const [myMemberships, setMyMemberships] = useState<Membership[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -30,15 +29,36 @@ const TeamManagement: React.FC = () => {
 
     try {
       setLoading(true);
-      // Obtener equipos del usuario
+      console.log('Cargando equipos para usuario:', user.id);
       const myTeams = await teamService.getMyTeams(user.id);
-      console.log('Equipos cargados:', myTeams); // Debug
-      setTeams(myTeams);
+      console.log('Equipos recibidos:', myTeams);
       
-      // Obtener membresías para saber el rol en cada equipo
-      const membresias = await membershipService.obtenerMembresiasPorUsuario(user.id);
-      console.log('Membresías cargadas:', membresias); // Debug
-      setMyMemberships(membresias);
+      // Cargar miembros para cada equipo
+      const teamsWithMembers = await Promise.all(
+        myTeams.map(async (team) => {
+          try {
+            const members = await teamService.listMembers(team.id);
+            console.log(`Miembros del equipo ${team.id}:`, members);
+            return {
+              ...team,
+              memberships: members
+            };
+          } catch (err) {
+            console.error(`Error cargando miembros del equipo ${team.id}:`, err);
+            return {
+              ...team,
+              memberships: []
+            };
+          }
+        })
+      );
+      
+      console.log('Equipos con miembros:', teamsWithMembers);
+      setTeams(teamsWithMembers);
+      
+      if (teamsWithMembers.length > 0) {
+        setSelectedTeam(teamsWithMembers[0]);
+      }
     } catch (err: any) {
       setError('Error al cargar tus equipos');
       console.error('Error loading teams:', err);
@@ -50,11 +70,106 @@ const TeamManagement: React.FC = () => {
   const loadAllUsers = async () => {
     try {
       const users = await userService.getAll();
-      console.log('Usuarios cargados:', users); // Debug
       setAllUsers(users);
     } catch (err: any) {
       console.error('Error loading users:', err);
     }
+  };
+
+  // Función para eliminar miembro
+  const handleRemoveMember = async (teamId: number, memberUserId: number) => {
+    if (!user) return;
+
+    const member = allUsers.find(u => u.id === memberUserId);
+    const memberName = member?.name || 'el usuario';
+
+    if (!window.confirm(`¿Estás seguro de que quieres eliminar a ${memberName} del equipo?`)) {
+      return;
+    }
+
+    try {
+      await teamService.removeMember(teamId, memberUserId, user.id);
+      alert('✅ Miembro eliminado exitosamente del equipo');
+      await loadMyTeams(); // Recargar
+    } catch (err: any) {
+      alert('❌ Error al eliminar miembro: ' + (err.response?.data?.message || 'Error desconocido'));
+      console.error('Error removing member:', err);
+    }
+  };
+
+  // Función para salir del equipo
+  const handleLeaveTeam = async (teamId: number) => {
+    if (!user) return;
+
+    const team = teams.find(t => t.id === teamId);
+    if (!team) {
+      alert('Equipo no encontrado');
+      return;
+    }
+
+    const myRole = getMyRoleInTeam(team);
+    const iAmOwner = myRole === 'PROPIETARIO';
+
+    // Verificación especial para propietarios
+    if (iAmOwner) {
+      const propietarios = team.memberships?.filter(m => m.rol === 'PROPIETARIO') || [];
+      if (propietarios.length === 1 && propietarios[0].user?.id === user.id) {
+        alert('❌ No puedes salir del equipo porque eres el único propietario. Primero asigna otro propietario o elimina el equipo.');
+        return;
+      }
+    }
+
+    if (!window.confirm(`¿Estás seguro de que quieres salir del equipo "${team.name}"?`)) {
+      return;
+    }
+
+    try {
+      await teamService.salirDelEquipo(teamId, user.id);
+      alert('✅ Has salido del equipo exitosamente');
+      await loadMyTeams();
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || 'Error desconocido';
+      
+      if (errorMessage.includes('último propietario')) {
+        alert('❌ No puedes salir del equipo porque eres el único propietario. Primero asigna otro propietario.');
+      } else {
+        alert('❌ Error al salir del equipo: ' + errorMessage);
+      }
+      console.error('Error leaving team:', err);
+    }
+  };
+
+  // Función para verificar si se puede eliminar un miembro
+  const canRemoveMember = (team: Team, memberUserId: number): boolean => {
+    // No puedes eliminarte a ti mismo
+    if (memberUserId === user?.id) {
+      return false;
+    }
+    return true;
+  };
+
+  // Función segura para obtener miembros
+  const getMembersCount = (team: Team): number => {
+    if (!team?.memberships) return 0;
+    
+    // Filtrar membresías válidas con usuario
+    const validMemberships = team.memberships.filter(membership => 
+      membership && membership.user && membership.user.id
+    );
+    
+    return validMemberships.length;
+  };
+
+  // Obtener mi rol en el equipo
+  const getMyRoleInTeam = (team: Team): string => {
+    if (!user || !team.memberships) return 'MIEMBRO';
+    
+    const myMembership = team.memberships.find(m => m.user?.id === user.id);
+    return myMembership?.rol || 'MIEMBRO';
+  };
+
+  const isOwner = (team: Team): boolean => {
+    return getMyRoleInTeam(team) === 'PROPIETARIO';
   };
 
   const handleCreateTeam = async (e: React.FormEvent) => {
@@ -73,23 +188,6 @@ const TeamManagement: React.FC = () => {
     }
   };
 
-  const handleLeaveTeam = async (teamId: number) => {
-    if (!user) return;
-
-    if (!window.confirm('¿Estás seguro de que quieres salir de este equipo?')) {
-      return;
-    }
-
-    try {
-      await membershipService.salirDelEquipo(teamId, user.id);
-      alert('✅ Has salido del equipo exitosamente');
-      await loadMyTeams();
-    } catch (err: any) {
-      alert('❌ Error al salir del equipo: ' + (err.response?.data?.message || 'Error desconocido'));
-      console.error('Error leaving team:', err);
-    }
-  };
-
   const openAddUserModal = (team: Team) => {
     setSelectedTeam(team);
     setSelectedUser(null);
@@ -105,7 +203,7 @@ const TeamManagement: React.FC = () => {
       await teamService.addUser(selectedTeam.id, selectedUser, selectedRole, user.id);
       alert('✅ Usuario agregado al equipo exitosamente!');
       setShowAddUserModal(false);
-      await loadMyTeams(); // Recargar para ver los cambios
+      await loadMyTeams();
     } catch (err: any) {
       alert('❌ Error al agregar usuario: ' + (err.response?.data?.message || 'Error desconocido'));
       console.error('Error adding user to team:', err);
@@ -114,16 +212,6 @@ const TeamManagement: React.FC = () => {
     }
   };
 
-  const getMyRoleInTeam = (teamId: number): string => {
-    const membresia = myMemberships.find(m => m.team?.id === teamId);
-    return membresia?.rol || 'MIEMBRO';
-  };
-
-  const isOwner = (teamId: number): boolean => {
-    return getMyRoleInTeam(teamId) === 'PROPIETARIO';
-  };
-
-  // Obtener usuarios que no son miembros del equipo seleccionado
   const getAvailableUsers = (): User[] => {
     if (!selectedTeam) return allUsers;
 
@@ -132,21 +220,14 @@ const TeamManagement: React.FC = () => {
     
     return allUsers.filter(user => 
       !currentMemberIds.includes(user.id) && 
-      user.id !== selectedTeam.propietario?.id // Excluir al propietario original
+      user.id !== selectedTeam.propietario?.id
     );
   };
 
-  // Función segura para obtener el nombre del propietario
   const getOwnerName = (team: Team): string => {
     return team?.propietario?.name || 'Propietario no disponible';
   };
 
-  // Función segura para obtener miembros
-  const getMembersCount = (team: Team): number => {
-    return team?.memberships?.length || 0;
-  };
-
-  // Función segura para obtener tareas
   const getTasksCount = (team: Team): number => {
     return team?.tasks?.length || 0;
   };
@@ -360,12 +441,6 @@ const TeamManagement: React.FC = () => {
                   <span>Propietario</span>
                 </label>
               </div>
-              <p style={{ color: '#666', fontSize: '14px', margin: '5px 0 0 0' }}>
-                {selectedRole === 'PROPIETARIO' 
-                  ? '⚠️ El usuario tendrá los mismos privilegios que tú en este equipo'
-                  : 'El usuario podrá ver y trabajar en las tareas del equipo'
-                }
-              </p>
             </div>
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
@@ -406,15 +481,24 @@ const TeamManagement: React.FC = () => {
       {/* Lista de equipos */}
       <div style={{ display: 'grid', gap: '20px' }}>
         {teams.map(team => {
-          if (!team) return null; // Skip undefined teams
+          if (!team || typeof team !== 'object') {
+            console.warn('Equipo inválido encontrado:', team);
+            return null;
+          }
+
+          const teamId = team?.id || 0;
+          const teamName = team?.name || 'Equipo sin nombre';
+          const ownerName = getOwnerName(team);
+          const memberships = team?.memberships || [];
+          const tasks = team?.tasks || [];
           
-          const myRole = getMyRoleInTeam(team.id);
-          const iAmOwner = isOwner(team.id);
+          const myRole = getMyRoleInTeam(team);
+          const iAmOwner = isOwner(team);
           const membersCount = getMembersCount(team);
-          const tasksCount = getTasksCount(team);
-          
+          const tasksCount = tasks.length;
+
           return (
-            <div key={team.id} style={{
+            <div key={teamId} style={{
               backgroundColor: 'white',
               padding: '20px',
               borderRadius: '12px',
@@ -424,7 +508,7 @@ const TeamManagement: React.FC = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-                    <h3 style={{ margin: 0, color: '#333' }}>{team.name || 'Equipo sin nombre'}</h3>
+                    <h3 style={{ margin: 0, color: '#333' }}>{teamName}</h3>
                     <span style={{
                       padding: '4px 8px',
                       backgroundColor: iAmOwner ? '#28a745' : '#6c757d',
@@ -445,7 +529,7 @@ const TeamManagement: React.FC = () => {
                   }}>
                     <div>
                       <strong>👤 Propietario:</strong> 
-                      <div style={{ color: '#666' }}>{getOwnerName(team)}</div>
+                      <div style={{ color: '#666' }}>{ownerName}</div>
                     </div>
                     <div>
                       <strong>👥 Miembros:</strong> 
@@ -464,39 +548,26 @@ const TeamManagement: React.FC = () => {
                 
                 <div style={{ display: 'flex', gap: '10px', flexDirection: 'column', minWidth: '150px' }}>
                   {iAmOwner && (
-                    <>
-                      <button
-                        onClick={() => openAddUserModal(team)}
-                        style={{
-                          padding: '8px 16px',
-                          backgroundColor: '#17a2b8',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          fontWeight: 'bold'
-                        }}
-                      >
-                        👥 Agregar Usuario
-                      </button>
-                      <span style={{
-                        padding: '6px 12px',
-                        backgroundColor: '#ffc107',
-                        color: '#212529',
+                    <button
+                      onClick={() => openAddUserModal(team)}
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: '#17a2b8',
+                        color: 'white',
+                        border: 'none',
                         borderRadius: '4px',
+                        cursor: 'pointer',
                         fontSize: '12px',
-                        textAlign: 'center',
                         fontWeight: 'bold'
-                      }}>
-                        Eres Propietario
-                      </span>
-                    </>
+                      }}
+                    >
+                      👥 Agregar Usuario
+                    </button>
                   )}
                   
-                  {!iAmOwner && (
+                  {!iAmOwner ? (
                     <button
-                      onClick={() => handleLeaveTeam(team.id)}
+                      onClick={() => handleLeaveTeam(teamId)}
                       style={{
                         padding: '8px 16px',
                         backgroundColor: '#dc3545',
@@ -510,12 +581,27 @@ const TeamManagement: React.FC = () => {
                     >
                       🚪 Salir del Equipo
                     </button>
+                  ) : (
+                    <div style={{ 
+                      padding: '6px 12px',
+                      backgroundColor: '#ffc107',
+                      color: '#212529',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      textAlign: 'center',
+                      fontWeight: 'bold'
+                    }}>
+                      ⚠️ Eres Propietario
+                      <div style={{ fontSize: '10px', marginTop: '2px' }}>
+                        Puedes agregar/eliminar miembros
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
 
               {/* Lista de miembros (solo para propietarios) */}
-              {iAmOwner && team.memberships && team.memberships.length > 0 && (
+              {iAmOwner && memberships.length > 0 && (
                 <div style={{ 
                   marginTop: '15px', 
                   padding: '15px',
@@ -524,40 +610,68 @@ const TeamManagement: React.FC = () => {
                   border: '1px solid #e9ecef'
                 }}>
                   <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#333' }}>
-                    Miembros del equipo:
+                    Miembros del equipo ({membersCount}):
                   </h4>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                    {team.memberships.map((membership: any) => (
-                      <div 
-                        key={membership.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          padding: '6px 12px',
-                          backgroundColor: membership.rol === 'PROPIETARIO' ? '#e7f3ff' : '#f8f9fa',
-                          border: `1px solid ${membership.rol === 'PROPIETARIO' ? '#b3d7ff' : '#dee2e6'}`,
-                          borderRadius: '20px',
-                          fontSize: '12px'
-                        }}
-                      >
-                        <span style={{ 
-                          fontWeight: 'bold',
-                          color: membership.rol === 'PROPIETARIO' ? '#0066cc' : '#495057'
-                        }}>
-                          {membership.user?.name || 'Usuario desconocido'}
-                        </span>
-                        <span style={{ 
-                          padding: '2px 6px',
-                          backgroundColor: membership.rol === 'PROPIETARIO' ? '#0066cc' : '#6c757d',
-                          color: 'white',
-                          borderRadius: '10px',
-                          fontSize: '10px'
-                        }}>
-                          {membership.rol}
-                        </span>
-                      </div>
-                    ))}
+                    {memberships
+                      .filter(membership => membership && membership.user)
+                      .map((membership: any) => {
+                        const memberUserId = membership.user?.id;
+                        const memberName = membership.user?.name || 'Usuario desconocido';
+                        const memberRole = membership.rol || 'MIEMBRO';
+                        
+                        return (
+                          <div 
+                            key={membership.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '6px 12px',
+                              backgroundColor: memberRole === 'PROPIETARIO' ? '#e7f3ff' : '#f8f9fa',
+                              border: `1px solid ${memberRole === 'PROPIETARIO' ? '#b3d7ff' : '#dee2e6'}`,
+                              borderRadius: '20px',
+                              fontSize: '12px'
+                            }}
+                          >
+                            <span style={{ 
+                              fontWeight: 'bold',
+                              color: memberRole === 'PROPIETARIO' ? '#0066cc' : '#495057'
+                            }}>
+                              {memberName}
+                            </span>
+                            <span style={{ 
+                              padding: '2px 6px',
+                              backgroundColor: memberRole === 'PROPIETARIO' ? '#0066cc' : '#6c757d',
+                              color: 'white',
+                              borderRadius: '10px',
+                              fontSize: '10px'
+                            }}>
+                              {memberRole}
+                            </span>
+                            
+                            {/* Botón para eliminar miembro */}
+                            {iAmOwner && memberUserId && memberUserId !== user?.id && canRemoveMember(team, memberUserId) && (
+                              <button
+                                onClick={() => handleRemoveMember(teamId, memberUserId)}
+                                style={{
+                                  padding: '2px 6px',
+                                  backgroundColor: '#dc3545',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontSize: '10px',
+                                  marginLeft: '5px'
+                                }}
+                                title={`Eliminar a ${memberName} del equipo`}
+                              >
+                                🗑️ Eliminar
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
                   </div>
                 </div>
               )}
