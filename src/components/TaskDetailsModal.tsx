@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Task, Comment, User } from '../types';
 import { taskService } from '../services/taskService';
 import { commentService } from '../services/commentService';
+import { historialEstadoService, HistorialEstado as HistorialEstadoType } from '../services/historialEstadoService';
 import { useAuth } from '../contexts/AuthContext';
 import { getDueDateWarning, isTaskUrgent } from '../utils/dateUtils';
 
@@ -20,10 +21,13 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
 }) => {
   const [currentTask, setCurrentTask] = useState<Task>(task);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [historial, setHistorial] = useState<HistorialEstadoType[]>([]);
   const [newComment, setNewComment] = useState('');
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [commentLoading, setCommentLoading] = useState(false);
+  const [historialLoading, setHistorialLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'info' | 'comments' | 'history'>('info');
   const { user } = useAuth();
 
   // Estados para edición
@@ -36,43 +40,58 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       loadComments();
+      loadHistorial();
       setCurrentTask(task);
       resetEditFields();
     }
   }, [isOpen, task]);
 
   const loadComments = async () => {
-  if (!user) return;
-  
-  try {
-    setCommentLoading(true);
-    console.log('🔄 Cargando comentarios para tarea:', task.id);
+    if (!user) return;
     
-    const commentsData = await commentService.getByTask(task.id, user.id);
-    console.log('✅ Comentarios cargados:', commentsData);
-    
-    setComments(commentsData);
-  } catch (err: any) {
-    console.error('❌ Error loading comments:', err);
-    
-    // Mostrar información detallada del error
-    if (err.response) {
-      console.error('❌ Error response:', err.response.data);
-      console.error('❌ Error status:', err.response.status);
-      alert(`Error ${err.response.status}: ${err.response.data?.message || 'Error del servidor'}`);
-    } else if (err.request) {
-      console.error('❌ No response received:', err.request);
-      alert('No se pudo conectar con el servidor. Verifica que el backend esté corriendo.');
-    } else {
-      console.error('❌ Error configurando la petición:', err.message);
-      alert('Error inesperado: ' + err.message);
+    try {
+      setCommentLoading(true);
+      console.log('🔄 Cargando comentarios para tarea:', task.id);
+      
+      const commentsData = await commentService.getByTask(task.id, user.id);
+      console.log('✅ Comentarios cargados:', commentsData);
+      
+      setComments(commentsData);
+    } catch (err: any) {
+      console.error('❌ Error loading comments:', err);
+      
+      // Mostrar información detallada del error
+      if (err.response) {
+        console.error('❌ Error response:', err.response.data);
+        console.error('❌ Error status:', err.response.status);
+        alert(`Error ${err.response.status}: ${err.response.data?.message || 'Error del servidor'}`);
+      } else if (err.request) {
+        console.error('❌ No response received:', err.request);
+        alert('No se pudo conectar con el servidor. Verifica que el backend esté corriendo.');
+      } else {
+        console.error('❌ Error configurando la petición:', err.message);
+        alert('Error inesperado: ' + err.message);
+      }
+      
+      // En caso de error, establecer comentarios vacíos
+      setComments([]);
+    } finally {
+      setCommentLoading(false);
     }
-    
-    // En caso de error, establecer comentarios vacíos
-    setComments([]);
-  } finally {
-    setCommentLoading(false);
-  }
+  };
+
+  const loadHistorial = async () => {
+    try {
+      setHistorialLoading(true);
+      console.log('🔄 Cargando historial de estados...');
+      const historialData = await historialEstadoService.getByTask(task.id);
+      setHistorial(historialData);
+    } catch (err: any) {
+      console.error('❌ Error loading history:', err);
+      // No mostrar alerta para no molestar, solo log
+    } finally {
+      setHistorialLoading(false);
+    }
   };
 
   const resetEditFields = () => {
@@ -110,6 +129,9 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
           setCurrentTask(fullUpdatedTask);
           onTaskUpdated(fullUpdatedTask);
         }
+        
+        // RECARGAR EL HISTORIAL después de cambiar el estado
+        await loadHistorial();
       } else {
         setCurrentTask(updatedTask);
         onTaskUpdated(updatedTask);
@@ -126,31 +148,31 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   };
 
   const handleAddComment = async () => {
-  if (!user || !newComment.trim()) return;
+    if (!user || !newComment.trim()) return;
 
-  try {
-    setCommentLoading(true);
-    console.log('🔄 Agregando comentario:', newComment);
-    
-    await commentService.create(task.id, newComment, user.id);
-    console.log('✅ Comentario agregado exitosamente');
-    
-    setNewComment('');
-    await loadComments(); // Recargar comentarios
-  } catch (err: any) {
-    console.error('❌ Error al agregar comentario:', err);
-    
-    if (err.response) {
-      alert('❌ Error al agregar comentario: ' + (err.response.data?.message || 'Error del servidor'));
-    } else if (err.request) {
-      alert('❌ No se pudo conectar con el servidor');
-    } else {
-      alert('❌ Error inesperado: ' + err.message);
+    try {
+      setCommentLoading(true);
+      console.log('🔄 Agregando comentario:', newComment);
+      
+      await commentService.create(task.id, newComment, user.id);
+      console.log('✅ Comentario agregado exitosamente');
+      
+      setNewComment('');
+      await loadComments(); // Recargar comentarios
+    } catch (err: any) {
+      console.error('❌ Error al agregar comentario:', err);
+      
+      if (err.response) {
+        alert('❌ Error al agregar comentario: ' + (err.response.data?.message || 'Error del servidor'));
+      } else if (err.request) {
+        alert('❌ No se pudo conectar con el servidor');
+      } else {
+        alert('❌ Error inesperado: ' + err.message);
+      }
+    } finally {
+      setCommentLoading(false);
     }
-  } finally {
-    setCommentLoading(false);
-  }
-};
+  };
 
   const handleDeleteComment = async (commentId: number) => {
     if (!user) return;
@@ -260,342 +282,613 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
-          {/* Columna izquierda - Información de la tarea */}
-          <div>
-            <h3 style={{ marginBottom: '15px', color: '#333' }}>Información de la Tarea</h3>
-            
-            {/* Descripción */}
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Descripción:</label>
-              {editing ? (
-                <textarea
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  rows={4}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '2px solid #007bff',
-                    borderRadius: '6px',
-                    resize: 'vertical'
-                  }}
-                />
-              ) : (
-                <p style={{ margin: 0, color: '#666', whiteSpace: 'pre-wrap' }}>
-                  {currentTask.description || 'Sin descripción'}
-                </p>
-              )}
-            </div>
+        {/* Sistema de pestañas */}
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ 
+            display: 'flex', 
+            borderBottom: '2px solid #e9ecef',
+            marginBottom: '20px'
+          }}>
+            <button
+              onClick={() => setActiveTab('info')}
+              style={{
+                padding: '12px 20px',
+                backgroundColor: activeTab === 'info' ? '#007bff' : 'transparent',
+                color: activeTab === 'info' ? 'white' : '#007bff',
+                border: 'none',
+                borderBottom: activeTab === 'info' ? '2px solid #007bff' : 'none',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                borderRadius: '6px 6px 0 0'
+              }}
+            >
+              📋 Información
+            </button>
+            <button
+              onClick={() => setActiveTab('comments')}
+              style={{
+                padding: '12px 20px',
+                backgroundColor: activeTab === 'comments' ? '#007bff' : 'transparent',
+                color: activeTab === 'comments' ? 'white' : '#007bff',
+                border: 'none',
+                borderBottom: activeTab === 'comments' ? '2px solid #007bff' : 'none',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                borderRadius: '6px 6px 0 0'
+              }}
+            >
+              💬 Comentarios ({comments.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              style={{
+                padding: '12px 20px',
+                backgroundColor: activeTab === 'history' ? '#007bff' : 'transparent',
+                color: activeTab === 'history' ? 'white' : '#007bff',
+                border: 'none',
+                borderBottom: activeTab === 'history' ? '2px solid #007bff' : 'none',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                borderRadius: '6px 6px 0 0'
+              }}
+            >
+              📊 Historial ({historial.length})
+            </button>
+          </div>
 
-            {/* Estado */}
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Estado:</label>
-              {editing ? (
-                <select
-                    value={editEstado}
-                    onChange={(e) => setEditEstado(e.target.value as "PENDIENTE" | "EN_CURSO" | "FINALIZADA" | "CANCELADA")}
-                    style={{
+          {/* Contenido de las pestañas */}
+          {activeTab === 'info' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+              {/* Columna izquierda - Información de la tarea */}
+              <div>
+                <h3 style={{ marginBottom: '15px', color: '#333' }}>Información de la Tarea</h3>
+                
+                {/* Descripción */}
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Descripción:</label>
+                  {editing ? (
+                    <textarea
+                      value={editDescription}
+                      onChange={(e) => setEditDescription(e.target.value)}
+                      rows={4}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: '2px solid #007bff',
+                        borderRadius: '6px',
+                        resize: 'vertical'
+                      }}
+                    />
+                  ) : (
+                    <p style={{ margin: 0, color: '#666', whiteSpace: 'pre-wrap' }}>
+                      {currentTask.description || 'Sin descripción'}
+                    </p>
+                  )}
+                </div>
+
+                {/* Estado */}
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Estado:</label>
+                  {editing ? (
+                    <select
+                      value={editEstado}
+                      onChange={(e) => setEditEstado(e.target.value as "PENDIENTE" | "EN_CURSO" | "FINALIZADA" | "CANCELADA")}
+                      style={{
                         width: '100%',
                         padding: '8px',
                         border: '2px solid #007bff',
                         borderRadius: '6px'
-                    }}
+                      }}
                     >
-                  <option value="PENDIENTE">PENDIENTE</option>
-                  <option value="EN_CURSO">EN_CURSO</option>
-                  <option value="FINALIZADA">FINALIZADA</option>
-                  <option value="CANCELADA">CANCELADA</option>
-                </select>
-              ) : (
-                <span style={{
-                  padding: '6px 12px',
-                  backgroundColor: getEstadoColor(currentTask.estado),
-                  color: 'white',
-                  borderRadius: '20px',
-                  fontWeight: 'bold',
-                  fontSize: '14px'
-                }}>
-                  {currentTask.estado}
-                </span>
-              )}
-            </div>
-
-            {/* Prioridad */}
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Prioridad:</label>
-              {editing ? (
-                <select
-                  value={editPriority}
-                  onChange={(e) => setEditPriority(e.target.value as any)}
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    border: '2px solid #007bff',
-                    borderRadius: '6px'
-                  }}
-                >
-                  <option value="baja">🟢 Baja</option>
-                  <option value="media">🟡 Media</option>
-                  <option value="alta">🔴 Alta</option>
-                </select>
-              ) : (
-                <span style={{
-                  padding: '6px 12px',
-                  backgroundColor: getPriorityColor(currentTask.priority),
-                  color: 'white',
-                  borderRadius: '20px',
-                  fontWeight: 'bold',
-                  fontSize: '14px'
-                }}>
-                  {getPriorityText(currentTask.priority)}
-                </span>
-              )}
-            </div>
-
-            {/* Fecha límite */}
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                Fecha Límite:
-                {isTaskUrgent(currentTask.dueDate, currentTask.estado) && (
-                  <span style={{ 
-                    marginLeft: '8px',
-                    color: '#dc3545',
-                    fontSize: '12px',
-                    fontWeight: 'bold'
-                  }}>
-                    ⚠️ ATENCIÓN
-                  </span>
-                )}
-              </label>
-              {editing ? (
-                <input
-                  type="date"
-                  value={editDueDate}
-                  onChange={(e) => setEditDueDate(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    border: '2px solid #007bff',
-                    borderRadius: '6px'
-                  }}
-                />
-              ) : (
-                <div>
-                  <div style={{ 
-                    color: '#666',
-                    marginBottom: currentTask.dueDate ? '8px' : '0'
-                  }}>
-                    {currentTask.dueDate 
-                      ? new Date(currentTask.dueDate).toLocaleDateString() 
-                      : 'Sin fecha límite'
-                    }
-                  </div>
-                  
-                  {/* Aviso de fecha límite */}
-                  {currentTask.dueDate && getDueDateWarning(currentTask.dueDate, currentTask.estado).message && (
-                    <div style={{
-                      padding: '10px',
-                      backgroundColor: getDueDateWarning(currentTask.dueDate, currentTask.estado).backgroundColor,
-                      color: getDueDateWarning(currentTask.dueDate, currentTask.estado).color,
-                      border: `1px solid ${getDueDateWarning(currentTask.dueDate, currentTask.estado).color}40`,
-                      borderRadius: '6px',
+                      <option value="PENDIENTE">PENDIENTE</option>
+                      <option value="EN_CURSO">EN_CURSO</option>
+                      <option value="FINALIZADA">FINALIZADA</option>
+                      <option value="CANCELADA">CANCELADA</option>
+                    </select>
+                  ) : (
+                    <span style={{
+                      padding: '6px 12px',
+                      backgroundColor: getEstadoColor(currentTask.estado),
+                      color: 'white',
+                      borderRadius: '20px',
                       fontWeight: 'bold',
                       fontSize: '14px'
                     }}>
-                      {getDueDateWarning(currentTask.dueDate, currentTask.estado).message}
+                      {currentTask.estado}
+                    </span>
+                  )}
+                </div>
+
+                {/* Prioridad */}
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Prioridad:</label>
+                  {editing ? (
+                    <select
+                      value={editPriority}
+                      onChange={(e) => setEditPriority(e.target.value as any)}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        border: '2px solid #007bff',
+                        borderRadius: '6px'
+                      }}
+                    >
+                      <option value="baja">🟢 Baja</option>
+                      <option value="media">🟡 Media</option>
+                      <option value="alta">🔴 Alta</option>
+                    </select>
+                  ) : (
+                    <span style={{
+                      padding: '6px 12px',
+                      backgroundColor: getPriorityColor(currentTask.priority),
+                      color: 'white',
+                      borderRadius: '20px',
+                      fontWeight: 'bold',
+                      fontSize: '14px'
+                    }}>
+                      {getPriorityText(currentTask.priority)}
+                    </span>
+                  )}
+                </div>
+
+                {/* Fecha límite */}
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                    Fecha Límite:
+                    {isTaskUrgent(currentTask.dueDate, currentTask.estado) && (
+                      <span style={{ 
+                        marginLeft: '8px',
+                        color: '#dc3545',
+                        fontSize: '12px',
+                        fontWeight: 'bold'
+                      }}>
+                        ⚠️ ATENCIÓN
+                      </span>
+                    )}
+                  </label>
+                  {editing ? (
+                    <input
+                      type="date"
+                      value={editDueDate}
+                      onChange={(e) => setEditDueDate(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        border: '2px solid #007bff',
+                        borderRadius: '6px'
+                      }}
+                    />
+                  ) : (
+                    <div>
+                      <div style={{ 
+                        color: '#666',
+                        marginBottom: currentTask.dueDate ? '8px' : '0'
+                      }}>
+                        {currentTask.dueDate 
+                          ? new Date(currentTask.dueDate).toLocaleDateString() 
+                          : 'Sin fecha límite'
+                        }
+                      </div>
+                      
+                      {/* Aviso de fecha límite */}
+                      {currentTask.dueDate && getDueDateWarning(currentTask.dueDate, currentTask.estado).message && (
+                        <div style={{
+                          padding: '10px',
+                          backgroundColor: getDueDateWarning(currentTask.dueDate, currentTask.estado).backgroundColor,
+                          color: getDueDateWarning(currentTask.dueDate, currentTask.estado).color,
+                          border: `1px solid ${getDueDateWarning(currentTask.dueDate, currentTask.estado).color}40`,
+                          borderRadius: '6px',
+                          fontWeight: 'bold',
+                          fontSize: '14px'
+                        }}>
+                          {getDueDateWarning(currentTask.dueDate, currentTask.estado).message}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
-            {/* Información del equipo y usuario */}
-            <div style={{ 
-              padding: '15px', 
-              backgroundColor: '#f8f9fa', 
-              borderRadius: '8px',
-              marginBottom: '20px'
-            }}>
-              <div style={{ marginBottom: '10px' }}>
-                <strong>👥 Equipo:</strong> 
-                <div style={{ color: '#666' }}>{currentTask.team.name}</div>
-              </div>
-              <div>
-                <strong>👤 Creada por:</strong> 
-                <div style={{ color: '#666' }}>{currentTask.user.name}</div>
-              </div>
-              <div style={{ marginTop: '10px', fontSize: '12px', color: '#999' }}>
-                <strong>📅 Creada:</strong> {new Date(currentTask.fechaCreacion).toLocaleDateString()}
-              </div>
-            </div>
 
-            {/* Botones de acción */}
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              {!editing ? (
-                <>
-                  <button
-                    onClick={() => setEditing(true)}
-                    style={{
-                      padding: '10px 20px',
-                      backgroundColor: '#007bff',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    ✏️ Editar Tarea
-                  </button>
-                  <button
-                    onClick={onClose}
-                    style={{
-                      padding: '10px 20px',
-                      backgroundColor: '#6c757d',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Cerrar
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={handleSaveTask}
-                    disabled={loading}
-                    style={{
-                      padding: '10px 20px',
-                      backgroundColor: loading ? '#6c757d' : '#28a745',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: loading ? 'not-allowed' : 'pointer',
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    {loading ? 'Guardando...' : '💾 Guardar Cambios'}
-                  </button>
-                  <button
-                    onClick={resetEditFields}
-                    style={{
-                      padding: '10px 20px',
-                      backgroundColor: '#6c757d',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    ❌ Cancelar
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Columna derecha - Comentarios */}
-          <div>
-            <h3 style={{ marginBottom: '15px', color: '#333' }}>Comentarios</h3>
-            
-            {/* Lista de comentarios */}
-            <div style={{ 
-              maxHeight: '300px', 
-              overflowY: 'auto',
-              marginBottom: '20px',
-              border: '1px solid #e9ecef',
-              borderRadius: '8px',
-              padding: '15px'
-            }}>
-              {commentLoading ? (
-                <div style={{ textAlign: 'center', color: '#666' }}>Cargando comentarios...</div>
-              ) : comments.length === 0 ? (
-                <div style={{ textAlign: 'center', color: '#666', fontStyle: 'italic' }}>
-                  No hay comentarios aún
+                {/* Información del equipo y usuario */}
+                <div style={{ 
+                  padding: '15px', 
+                  backgroundColor: '#f8f9fa', 
+                  borderRadius: '8px',
+                  marginBottom: '20px'
+                }}>
+                  <div style={{ marginBottom: '10px' }}>
+                    <strong>👥 Equipo:</strong> 
+                    <div style={{ color: '#666' }}>{currentTask.team.name}</div>
+                  </div>
+                  <div>
+                    <strong>👤 Creada por:</strong> 
+                    <div style={{ color: '#666' }}>{currentTask.user.name}</div>
+                  </div>
+                  <div style={{ marginTop: '10px', fontSize: '12px', color: '#999' }}>
+                    <strong>📅 Creada:</strong> {new Date(currentTask.fechaCreacion).toLocaleDateString()}
+                  </div>
                 </div>
-              ) : (
-                comments.map(comment => (
-                  <div 
-                    key={comment.id}
-                    style={{
-                      padding: '12px',
-                      marginBottom: '10px',
-                      backgroundColor: '#f8f9fa',
-                      borderRadius: '8px',
-                      borderLeft: '4px solid #007bff'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                      <strong style={{ color: '#333' }}>{comment.usuario.name}</strong>
-                      <span style={{ fontSize: '12px', color: '#666' }}>
-                        {new Date(comment.fechaCreacion).toLocaleDateString()} a las {new Date(comment.fechaCreacion).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <p style={{ margin: 0, color: '#333', whiteSpace: 'pre-wrap' }}>
-                      {comment.contenido}
-                    </p>
-                    
-                    {/* Botón eliminar comentario (solo para el autor) */}
-                    {comment.usuario.id === user?.id && (
+
+                {/* Botones de acción */}
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {!editing ? (
+                    <>
                       <button
-                        onClick={() => handleDeleteComment(comment.id)}
+                        onClick={() => setEditing(true)}
                         style={{
-                          marginTop: '8px',
-                          padding: '4px 8px',
-                          backgroundColor: '#dc3545',
+                          padding: '10px 20px',
+                          backgroundColor: '#007bff',
                           color: 'white',
                           border: 'none',
-                          borderRadius: '4px',
+                          borderRadius: '6px',
                           cursor: 'pointer',
-                          fontSize: '12px'
+                          fontWeight: 'bold'
                         }}
                       >
-                        🗑️ Eliminar
+                        ✏️ Editar Tarea
                       </button>
-                    )}
+                      <button
+                        onClick={onClose}
+                        style={{
+                          padding: '10px 20px',
+                          backgroundColor: '#6c757d',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Cerrar
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleSaveTask}
+                        disabled={loading}
+                        style={{
+                          padding: '10px 20px',
+                          backgroundColor: loading ? '#6c757d' : '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: loading ? 'not-allowed' : 'pointer',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        {loading ? 'Guardando...' : '💾 Guardar Cambios'}
+                      </button>
+                      <button
+                        onClick={resetEditFields}
+                        style={{
+                          padding: '10px 20px',
+                          backgroundColor: '#6c757d',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ❌ Cancelar
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              
+            </div>
+          )}
+
+          {activeTab === 'comments' && (
+            <div>
+              <h3 style={{ marginBottom: '15px', color: '#333' }}>Comentarios</h3>
+              
+              {/* Lista de comentarios */}
+              <div style={{ 
+                maxHeight: '400px', 
+                overflowY: 'auto',
+                marginBottom: '20px',
+                border: '1px solid #e9ecef',
+                borderRadius: '8px',
+                padding: '15px'
+              }}>
+                {commentLoading ? (
+                  <div style={{ textAlign: 'center', color: '#666' }}>Cargando comentarios...</div>
+                ) : comments.length === 0 ? (
+                  <div style={{ textAlign: 'center', color: '#666', fontStyle: 'italic' }}>
+                    No hay comentarios aún
                   </div>
-                ))
+                ) : (
+                  comments.map(comment => (
+                    <div 
+                      key={comment.id}
+                      style={{
+                        padding: '12px',
+                        marginBottom: '10px',
+                        backgroundColor: '#f8f9fa',
+                        borderRadius: '8px',
+                        borderLeft: '4px solid #007bff'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <strong style={{ color: '#333' }}>{comment.usuario.name}</strong>
+                        <span style={{ fontSize: '12px', color: '#666' }}>
+                          {new Date(comment.fechaCreacion).toLocaleDateString()} a las {new Date(comment.fechaCreacion).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <p style={{ margin: 0, color: '#333', whiteSpace: 'pre-wrap' }}>
+                        {comment.contenido}
+                      </p>
+                      
+                      {/* Botón eliminar comentario (solo para el autor) */}
+                      {comment.usuario.id === user?.id && (
+                        <button
+                          onClick={() => handleDeleteComment(comment.id)}
+                          style={{
+                            marginTop: '8px',
+                            padding: '4px 8px',
+                            backgroundColor: '#dc3545',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px'
+                          }}
+                        >
+                          🗑️ Eliminar
+                        </button>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Formulario para nuevo comentario */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Nuevo Comentario:
+                </label>
+                <textarea
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  rows={3}
+                  placeholder="Escribe tu comentario..."
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    resize: 'vertical',
+                    marginBottom: '10px'
+                  }}
+                />
+                <button
+                  onClick={handleAddComment}
+                  disabled={!newComment.trim() || commentLoading}
+                  style={{
+                    padding: '10px 20px',
+                    backgroundColor: !newComment.trim() || commentLoading ? '#6c757d' : '#17a2b8',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: !newComment.trim() || commentLoading ? 'not-allowed' : 'pointer',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  {commentLoading ? 'Enviando...' : '💬 Enviar Comentario'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'history' && (
+            <div>
+              <h3 style={{ marginBottom: '15px', color: '#333' }}>Historial de Estados</h3>
+              
+              {/* Estadísticas rápidas */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                gap: '15px',
+                marginBottom: '20px'
+              }}>
+                <div style={{
+                  padding: '15px',
+                  backgroundColor: '#e7f3ff',
+                  borderRadius: '8px',
+                  textAlign: 'center',
+                  border: '2px solid #b3d7ff'
+                }}>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0066cc' }}>
+                    {historial.length}
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#333' }}>Cambios totales</div>
+                </div>
+                
+                {historial.length > 0 && (
+                  <div style={{
+                    padding: '15px',
+                    backgroundColor: '#fff3cd',
+                    borderRadius: '8px',
+                    textAlign: 'center',
+                    border: '2px solid #ffeaa7'
+                  }}>
+                    <div style={{ fontSize: '14px', color: '#856404', fontWeight: 'bold' }}>
+                      {new Date(historial[0].fecha).toLocaleDateString()}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#666' }}>Último cambio</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Lista del historial */}
+              <div style={{ 
+                maxHeight: '400px', 
+                overflowY: 'auto',
+                border: '1px solid #e9ecef',
+                borderRadius: '8px',
+                padding: '0'
+              }}>
+                {historialLoading ? (
+                  <div style={{ 
+                    textAlign: 'center', 
+                    color: '#666', 
+                    padding: '40px 20px' 
+                  }}>
+                    Cargando historial...
+                  </div>
+                ) : historial.length === 0 ? (
+                  <div style={{ 
+                    textAlign: 'center', 
+                    color: '#666', 
+                    padding: '40px 20px',
+                    fontStyle: 'italic'
+                  }}>
+                    No hay historial de cambios de estado
+                  </div>
+                ) : (
+                  historial.map((item, index) => (
+                    <div 
+                      key={item.id}
+                      style={{
+                        padding: '15px',
+                        borderBottom: index < historial.length - 1 ? '1px solid #e9ecef' : 'none',
+                        backgroundColor: index === 0 ? '#f8f9fa' : 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '15px'
+                      }}
+                    >
+                      {/* Icono y línea de tiempo */}
+                      <div style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center',
+                        minWidth: '50px'
+                      }}>
+                        <div style={{
+                          width: '30px',
+                          height: '30px',
+                          borderRadius: '50%',
+                          backgroundColor: index === 0 ? '#28a745' : '#6c757d',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white',
+                          fontWeight: 'bold',
+                          fontSize: '14px'
+                        }}>
+                          {index === 0 ? '✓' : '•'}
+                        </div>
+                        {index < historial.length - 1 && (
+                          <div style={{
+                            width: '2px',
+                            height: '20px',
+                            backgroundColor: '#dee2e6',
+                            margin: '5px 0'
+                          }}></div>
+                        )}
+                      </div>
+
+                      {/* Información del cambio */}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                          <strong style={{ color: '#333' }}>{item.usuario.name}</strong>
+                          <span style={{ fontSize: '12px', color: '#666' }}>
+                            {new Date(item.fecha).toLocaleDateString()} a las {new Date(item.fecha).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '10px',
+                          fontSize: '14px'
+                        }}>
+                          <span style={{
+                            padding: '4px 8px',
+                            backgroundColor: getEstadoColor(item.estadoAnterior),
+                            color: 'white',
+                            borderRadius: '12px',
+                            fontSize: '12px',
+                            fontWeight: 'bold'
+                          }}>
+                            {item.estadoAnterior}
+                          </span>
+                          
+                          <span style={{ color: '#666' }}>→</span>
+                          
+                          <span style={{
+                            padding: '4px 8px',
+                            backgroundColor: getEstadoColor(item.estadoNuevo),
+                            color: 'white',
+                            borderRadius: '12px',
+                            fontSize: '12px',
+                            fontWeight: 'bold'
+                          }}>
+                            {item.estadoNuevo}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Leyenda de estados */}
+              {historial.length > 0 && (
+                <div style={{ 
+                  marginTop: '15px', 
+                  padding: '12px',
+                  backgroundColor: '#f8f9fa',
+                  borderRadius: '6px',
+                  border: '1px solid #e9ecef'
+                }}>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#333' }}>
+                    Leyenda de Estados:
+                  </h4>
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <div style={{
+                        width: '12px',
+                        height: '12px',
+                        backgroundColor: getEstadoColor('PENDIENTE'),
+                        borderRadius: '2px'
+                      }}></div>
+                      <span style={{ fontSize: '12px' }}>Pendiente</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <div style={{
+                        width: '12px',
+                        height: '12px',
+                        backgroundColor: getEstadoColor('EN_CURSO'),
+                        borderRadius: '2px'
+                      }}></div>
+                      <span style={{ fontSize: '12px' }}>En Curso</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <div style={{
+                        width: '12px',
+                        height: '12px',
+                        backgroundColor: getEstadoColor('FINALIZADA'),
+                        borderRadius: '2px'
+                      }}></div>
+                      <span style={{ fontSize: '12px' }}>Finalizada</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <div style={{
+                        width: '12px',
+                        height: '12px',
+                        backgroundColor: getEstadoColor('CANCELADA'),
+                        borderRadius: '2px'
+                      }}></div>
+                      <span style={{ fontSize: '12px' }}>Cancelada</span>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
-
-            {/* Formulario para nuevo comentario */}
-            <div>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                Nuevo Comentario:
-              </label>
-              <textarea
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                rows={3}
-                placeholder="Escribe tu comentario..."
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #ddd',
-                  borderRadius: '6px',
-                  resize: 'vertical',
-                  marginBottom: '10px'
-                }}
-              />
-              <button
-                onClick={handleAddComment}
-                disabled={!newComment.trim() || commentLoading}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: !newComment.trim() || commentLoading ? '#6c757d' : '#17a2b8',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: !newComment.trim() || commentLoading ? 'not-allowed' : 'pointer',
-                  fontWeight: 'bold'
-                }}
-              >
-                {commentLoading ? 'Enviando...' : '💬 Enviar Comentario'}
-              </button>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

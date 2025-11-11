@@ -86,3 +86,12 @@ export interface CreateTaskData {
   dueDate?: string;  
   etiquetasIds?: number[];
 }
+
+export interface HistorialEstado {
+  id: number;
+  estadoAnterior: string;
+  estadoNuevo: string;
+  usuario: User;
+  fecha: string;
+  tarea: Task;
+}
