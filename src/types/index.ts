@@ -83,6 +83,6 @@ export interface CreateTaskData {
   teamId: number;
   userId: number;
   priority?: "alta" | "media" | "baja";
-  dueDate?: string;
+  dueDate?: string;  
   etiquetasIds?: number[];
 }

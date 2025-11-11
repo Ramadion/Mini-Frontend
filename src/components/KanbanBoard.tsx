@@ -6,6 +6,7 @@ import { etiquetaService } from '../services/etiquetaService';
 import { useAuth } from '../contexts/AuthContext';
 import AsignarEtiquetasModal from './AsignarEtiquetasModal';
 import TaskDetailsModal from './TaskDetailsModal';
+import { getDueDateWarning, isTaskUrgent } from '../utils/dateUtils';
 
 const KanbanBoard: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -425,6 +426,35 @@ const KanbanBoard: React.FC = () => {
                       {getPriorityText(task.priority)}
                     </span>
                   </div>
+                  {/* Fecha límite */}
+                  {task.dueDate && (
+                  <div style={{ 
+                    marginBottom: '10px',
+                    padding: '6px 10px',
+                    backgroundColor: getDueDateWarning(task.dueDate, task.estado).backgroundColor,
+                    borderRadius: '4px',
+                    border: `1px solid ${getDueDateWarning(task.dueDate, task.estado).color}20`
+                  }}>
+                    <div style={{ 
+                      fontSize: '12px', 
+                      color: getDueDateWarning(task.dueDate, task.estado).color,
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}>
+                      <span>📅 {new Date(task.dueDate).toLocaleDateString()}</span>
+                      {getDueDateWarning(task.dueDate, task.estado).message && (
+                        <span style={{ 
+                          marginLeft: '8px',
+                          fontSize: '11px'
+                        }}>
+                          {getDueDateWarning(task.dueDate, task.estado).message}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                   {/* Descripción */}
                   {task.description && (
@@ -436,28 +466,6 @@ const KanbanBoard: React.FC = () => {
                     }}>
                       {task.description}
                     </p>
-                  )}
-
-                  {/* Fecha límite */}
-                  {task.dueDate && (
-                    <div style={{ 
-                      marginBottom: '10px',
-                      padding: '6px 10px',
-                      backgroundColor: '#fff3cd',
-                      borderRadius: '4px',
-                      border: '1px solid #ffeaa7'
-                    }}>
-                      <div style={{ 
-                        fontSize: '12px', 
-                        color: '#856404',
-                        fontWeight: 'bold'
-                      }}>
-                        📅 Vence: {new Date(task.dueDate).toLocaleDateString()}
-                        {new Date(task.dueDate) < new Date() && task.estado !== 'FINALIZADA' && (
-                          <span style={{ color: '#dc3545', marginLeft: '5px' }}>⚠️ Vencida</span>
-                        )}
-                      </div>
-                    </div>
                   )}
 
                   {/* Etiquetas */}

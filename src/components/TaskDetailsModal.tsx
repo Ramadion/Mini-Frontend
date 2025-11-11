@@ -3,6 +3,7 @@ import { Task, Comment, User } from '../types';
 import { taskService } from '../services/taskService';
 import { commentService } from '../services/commentService';
 import { useAuth } from '../contexts/AuthContext';
+import { getDueDateWarning, isTaskUrgent } from '../utils/dateUtils';
 
 interface TaskDetailsModalProps {
   isOpen: boolean;
@@ -354,7 +355,19 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
 
             {/* Fecha límite */}
             <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Fecha Límite:</label>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                Fecha Límite:
+                {isTaskUrgent(currentTask.dueDate, currentTask.estado) && (
+                  <span style={{ 
+                    marginLeft: '8px',
+                    color: '#dc3545',
+                    fontSize: '12px',
+                    fontWeight: 'bold'
+                  }}>
+                    ⚠️ ATENCIÓN
+                  </span>
+                )}
+              </label>
               {editing ? (
                 <input
                   type="date"
@@ -368,18 +381,34 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                   }}
                 />
               ) : (
-                <span style={{ color: '#666' }}>
-                  {currentTask.dueDate 
-                    ? new Date(currentTask.dueDate).toLocaleDateString() 
-                    : 'Sin fecha límite'
-                  }
-                  {currentTask.dueDate && new Date(currentTask.dueDate) < new Date() && currentTask.estado !== 'FINALIZADA' && (
-                    <span style={{ color: '#dc3545', marginLeft: '5px' }}>⚠️ Vencida</span>
+                <div>
+                  <div style={{ 
+                    color: '#666',
+                    marginBottom: currentTask.dueDate ? '8px' : '0'
+                  }}>
+                    {currentTask.dueDate 
+                      ? new Date(currentTask.dueDate).toLocaleDateString() 
+                      : 'Sin fecha límite'
+                    }
+                  </div>
+                  
+                  {/* Aviso de fecha límite */}
+                  {currentTask.dueDate && getDueDateWarning(currentTask.dueDate, currentTask.estado).message && (
+                    <div style={{
+                      padding: '10px',
+                      backgroundColor: getDueDateWarning(currentTask.dueDate, currentTask.estado).backgroundColor,
+                      color: getDueDateWarning(currentTask.dueDate, currentTask.estado).color,
+                      border: `1px solid ${getDueDateWarning(currentTask.dueDate, currentTask.estado).color}40`,
+                      borderRadius: '6px',
+                      fontWeight: 'bold',
+                      fontSize: '14px'
+                    }}>
+                      {getDueDateWarning(currentTask.dueDate, currentTask.estado).message}
+                    </div>
                   )}
-                </span>
+                </div>
               )}
             </div>
-
             {/* Información del equipo y usuario */}
             <div style={{ 
               padding: '15px', 

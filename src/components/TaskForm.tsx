@@ -60,56 +60,57 @@ const TaskForm: React.FC = () => {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !selectedTeam || !title.trim()) return;
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!user || !selectedTeam || !title.trim()) return;
 
-    try {
-      setSubmitLoading(true);
-      
-      // Primero, si hay una nueva etiqueta, crearla
-      let etiquetasIds = [...selectedEtiquetas];
-      if (showNewEtiqueta && newEtiquetaNombre.trim()) {
-        try {
-          const nuevaEtiqueta = await etiquetaService.create(newEtiquetaNombre, newEtiquetaColor);
-          etiquetasIds.push(nuevaEtiqueta.id);
-        } catch (err: any) {
-          console.error('Error creando etiqueta:', err);
-          // Continuar sin la nueva etiqueta si hay error
-        }
+  try {
+    setSubmitLoading(true);
+    
+    // Primero, si hay una nueva etiqueta, crearla
+    let etiquetasIds = [...selectedEtiquetas];
+    if (showNewEtiqueta && newEtiquetaNombre.trim()) {
+      try {
+        const nuevaEtiqueta = await etiquetaService.create(newEtiquetaNombre, newEtiquetaColor);
+        etiquetasIds.push(nuevaEtiqueta.id);
+      } catch (err: any) {
+        console.error('Error creando etiqueta:', err);
       }
-
-      // Crear la tarea
-      const taskData = {
-        title,
-        description,
-        teamId: selectedTeam,
-        userId: user.id,
-        priority,
-        dueDate: dueDate || undefined,
-        etiquetasIds: etiquetasIds.length > 0 ? etiquetasIds : undefined
-      };
-
-      await taskService.create(taskData);
-
-      // Limpiar formulario
-      setTitle('');
-      setDescription('');
-      setPriority('media');
-      setDueDate('');
-      setSelectedEtiquetas([]);
-      setNewEtiquetaNombre('');
-      setNewEtiquetaColor('#FF5733');
-      setShowNewEtiqueta(false);
-      
-      alert('✅ Tarea creada exitosamente!');
-    } catch (err: any) {
-      alert('❌ Error al crear la tarea: ' + (err.response?.data?.message || 'Error desconocido'));
-      console.error('Error creating task:', err);
-    } finally {
-      setSubmitLoading(false);
     }
-  };
+
+    // Crear la tarea CON dueDate
+    const taskData = {
+      title,
+      description,
+      teamId: selectedTeam,
+      userId: user.id,
+      priority,
+      dueDate: dueDate || undefined,  // AGREGAR: Incluir dueDate
+      etiquetasIds: etiquetasIds.length > 0 ? etiquetasIds : undefined
+    };
+
+    console.log('📤 Enviando datos al backend:', taskData); 
+
+    await taskService.create(taskData);
+
+    // Limpiar formulario
+    setTitle('');
+    setDescription('');
+    setPriority('media');
+    setDueDate('');  // AGREGAR: Limpiar fecha
+    setSelectedEtiquetas([]);
+    setNewEtiquetaNombre('');
+    setNewEtiquetaColor('#FF5733');
+    setShowNewEtiqueta(false);
+    
+    alert('✅ Tarea creada exitosamente!');
+  } catch (err: any) {
+    alert('❌ Error al crear la tarea: ' + (err.response?.data?.message || 'Error desconocido'));
+    console.error('Error creating task:', err);
+  } finally {
+    setSubmitLoading(false);
+  }
+};
 
   const toggleEtiqueta = (etiquetaId: number) => {
     setSelectedEtiquetas(prev =>

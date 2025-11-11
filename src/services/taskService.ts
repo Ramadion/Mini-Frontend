@@ -8,8 +8,8 @@ export const taskService = {
   },
 
   async create(taskData: CreateTaskData): Promise<Task> {
-    const response = await api.post('/tasks', taskData);
-    return response.data;
+  const response = await api.post('/tasks', taskData);
+  return response.data;
   },
 
   async update(id: number, userId: number, data: { 
