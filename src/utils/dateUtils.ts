@@ -19,10 +19,22 @@ export const getDueDateWarning = (dueDate: string | undefined, estado: string): 
 
   const today = new Date();
   const due = new Date(dueDate);
-  const timeDiff = due.getTime() - today.getTime();
-  const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+  
+  // Normalizar las fechas para comparar solo el día (sin horas, minutos, segundos)
+  const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const dueNormalized = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  
+  // Calcular la diferencia en días
+  const timeDiff = dueNormalized.getTime() - todayNormalized.getTime();
+  const daysDiff = Math.round(timeDiff / (1000 * 3600 * 24));
 
-  // Si la tarea está vencida
+  console.log('Fecha análisis:', {
+    hoy: todayNormalized.toDateString(),
+    vencimiento: dueNormalized.toDateString(),
+    diferenciaDias: daysDiff
+  });
+
+  // Si la tarea está vencida (días negativos)
   if (daysDiff < 0) {
     return {
       type: 'overdue',
